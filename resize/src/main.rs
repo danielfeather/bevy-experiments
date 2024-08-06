@@ -1,4 +1,5 @@
 use bevy::{
+    color::palettes::tailwind::SKY_400,
     log::{Level, LogPlugin},
     math::AspectRatio,
     prelude::*,
@@ -44,7 +45,15 @@ fn main() {
         .register_type::<Selected>()
         .insert_resource(DebugPickingMode::Normal)
         .add_systems(Startup, spawn_image)
-        .add_systems(Update, (on_load, handle_deselection, show_box_on_selection))
+        .add_systems(
+            Update,
+            (
+                on_load,
+                handle_deselection,
+                show_box_on_selection,
+                move_on_drag,
+            ),
+        )
         .run();
 }
 
@@ -57,16 +66,26 @@ fn spawn_image(mut commands: Commands, asset_server: Res<AssetServer>) {
             ..default()
         },
         PickableBundle::default(),
-        On::<Pointer<Drag>>::target_component_mut::<Transform>(move_on_drag),
         On::<Pointer<Click>>::target_commands_mut(|_, commands| {
             commands.insert(Selected);
         }),
     ));
 }
 
-fn move_on_drag(drag: &mut ListenerInput<Pointer<Drag>>, transform: &mut Transform) {
-    transform.translation.x = transform.translation.x + drag.delta.x;
-    transform.translation.y = transform.translation.y - drag.delta.y;
+fn move_on_drag(
+    mut drags: EventReader<Pointer<Drag>>,
+    mut handles: Query<&mut Transform, Or<(With<SelectionHandles>, With<Selected>)>>,
+) {
+    for drag in drags.read() {
+        if handles.get(drag.target).is_err() {
+            continue;
+        }
+
+        for mut transform in handles.iter_mut() {
+            transform.translation.x = transform.translation.x + drag.delta.x;
+            transform.translation.y = transform.translation.y - drag.delta.y;
+        }
+    }
 }
 
 /// Set the size and aspect ratio of the component
@@ -129,10 +148,11 @@ fn show_box_on_selection(
                     Mesh2dHandle(meshes.add(Ellipse::new(RESIZE_ANCHOR_AREA, RESIZE_ANCHOR_AREA)));
 
                 for (i, corner) in corners.iter().enumerate() {
-                    let color = Color::BLACK;
+                    let colour = Color::Srgba(SKY_400);
+
                     parent.spawn(MaterialMesh2dBundle {
                         mesh: shape.clone(),
-                        material: materials.add(color),
+                        material: materials.add(colour),
                         transform: Transform::from_xyz(corner.x, corner.y, 1.0),
                         ..default()
                     });
@@ -141,15 +161,22 @@ fn show_box_on_selection(
 
                     parent.spawn(MaterialMesh2dBundle {
                         mesh: shape.clone(),
-                        material: materials.add(color),
+                        material: materials.add(colour),
                         transform: Transform::from_xyz(corner.x, corner.y, 1.0),
                         ..default()
                     });
 
+                    let current = corners[i];
+
+                    let midpoint = match i + 1 {
+                        0..4 => current.midpoint(corners[i + 1]),
+                        _ => current.midpoint(corners[0]),
+                    };
+
                     parent.spawn(MaterialMesh2dBundle {
                         mesh: rect,
-                        material: materials.add(color),
-                        transform: Transform::from_xyz(corner.x, corner.y, 1.0),
+                        material: materials.add(colour),
+                        transform: Transform::from_xyz(midpoint.x, midpoint.y, 1.0),
                         ..default()
                     });
                 }
