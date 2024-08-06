@@ -115,16 +115,39 @@ fn show_box_on_selection(
             rect.min,
         ];
 
+        let sides: &[Rectangle; 4] = &[
+            Rectangle::new(corners[0].distance(corners[1]), 5.0),
+            Rectangle::new(5.0, corners[1].distance(corners[2])),
+            Rectangle::new(corners[2].distance(corners[3]), 5.0),
+            Rectangle::new(5.0, corners[3].distance(corners[0])),
+        ];
+
         commands
             .spawn((SpatialBundle::default(), SelectionHandles))
             .with_children(|parent| {
                 let shape =
                     Mesh2dHandle(meshes.add(Ellipse::new(RESIZE_ANCHOR_AREA, RESIZE_ANCHOR_AREA)));
 
-                for corner in corners {
+                for (i, corner) in corners.iter().enumerate() {
                     let color = Color::BLACK;
                     parent.spawn(MaterialMesh2dBundle {
                         mesh: shape.clone(),
+                        material: materials.add(color),
+                        transform: Transform::from_xyz(corner.x, corner.y, 1.0),
+                        ..default()
+                    });
+
+                    let rect = Mesh2dHandle(meshes.add(sides[i]));
+
+                    parent.spawn(MaterialMesh2dBundle {
+                        mesh: shape.clone(),
+                        material: materials.add(color),
+                        transform: Transform::from_xyz(corner.x, corner.y, 1.0),
+                        ..default()
+                    });
+
+                    parent.spawn(MaterialMesh2dBundle {
+                        mesh: rect,
                         material: materials.add(color),
                         transform: Transform::from_xyz(corner.x, corner.y, 1.0),
                         ..default()
