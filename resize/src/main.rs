@@ -2,12 +2,13 @@ use bevy::{
     log::{Level, LogPlugin},
     math::AspectRatio,
     prelude::*,
+    sprite::{MaterialMesh2dBundle, Mesh2dHandle},
 };
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_mod_picking::prelude::*;
 use bevy_web_asset::WebAssetPlugin;
 
-const RESIZE_ANCHOR_AREA: u32 = 32;
+const RESIZE_ANCHOR_AREA: f32 = 10.;
 
 #[derive(Debug, Component, Reflect)]
 struct Size {
@@ -17,6 +18,9 @@ struct Size {
 
 #[derive(Debug, Component, Reflect)]
 struct Selected;
+
+#[derive(Debug, Component, Reflect)]
+struct SelectionHandles;
 
 fn main() {
     App::new()
@@ -40,7 +44,7 @@ fn main() {
         .register_type::<Selected>()
         .insert_resource(DebugPickingMode::Normal)
         .add_systems(Startup, spawn_image)
-        .add_systems(Update, (on_load, handle_deselection))
+        .add_systems(Update, (on_load, handle_deselection, show_box_on_selection))
         .run();
 }
 
@@ -92,14 +96,54 @@ fn on_load(
     }
 }
 
-fn show_box_on_selection() {}
+fn show_box_on_selection(
+    selected: Query<(&Transform, &Size), Added<Selected>>,
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+) {
+    for (transform, size) in selected.iter() {
+        let rect = Rect::from_center_size(
+            Vec2::new(transform.translation.x, transform.translation.y),
+            size.dimensions.as_vec2(),
+        );
+
+        let corners: &[Vec2; 4] = &[
+            rect.min + Vec2::new(0_f32, rect.height()),
+            rect.max,
+            rect.max - Vec2::new(0_f32, rect.height()),
+            rect.min,
+        ];
+
+        commands
+            .spawn((SpatialBundle::default(), SelectionHandles))
+            .with_children(|parent| {
+                let shape =
+                    Mesh2dHandle(meshes.add(Ellipse::new(RESIZE_ANCHOR_AREA, RESIZE_ANCHOR_AREA)));
+
+                for corner in corners {
+                    let color = Color::BLACK;
+                    parent.spawn(MaterialMesh2dBundle {
+                        mesh: shape.clone(),
+                        material: materials.add(color),
+                        transform: Transform::from_xyz(corner.x, corner.y, 1.0),
+                        ..default()
+                    });
+                }
+            });
+    }
+}
 
 fn handle_deselection(
-    mut deslect: EventReader<Pointer<Deselect>>,
+    mut deslection: EventReader<Pointer<Deselect>>,
     selected: Query<Entity, With<Selected>>,
+    handles: Query<Entity, With<SelectionHandles>>,
     mut commands: Commands,
 ) {
-    for entity in selected.iter() {
-        commands.entity(entity).remove::<Selected>();
+    for deselect in deslection.read() {
+        for entity in selected.iter() {
+            commands.entity(entity).remove::<Selected>();
+            commands.entity(handles.single()).despawn_recursive();
+        }
     }
 }
