@@ -1,5 +1,5 @@
 use bevy::{
-    color::palettes::tailwind::SKY_400,
+    color::palettes::{css::WHITE, tailwind::SKY_400},
     log::{Level, LogPlugin},
     math::AspectRatio,
     prelude::*,
@@ -22,6 +22,9 @@ struct Selected;
 
 #[derive(Debug, Component, Reflect)]
 struct SelectionHandles;
+
+#[derive(Debug, Component, Reflect)]
+struct SelectionHandle;
 
 fn main() {
     App::new()
@@ -49,9 +52,10 @@ fn main() {
             Update,
             (
                 on_load,
-                handle_deselection,
+                // handle_deselection,
                 show_box_on_selection,
                 move_on_drag,
+                handle_resize,
             ),
         )
         .run();
@@ -141,59 +145,116 @@ fn show_box_on_selection(
             Rectangle::new(5.0, corners[3].distance(corners[0])),
         ];
 
+        let background =
+            Mesh2dHandle(meshes.add(Ellipse::new(RESIZE_ANCHOR_AREA, RESIZE_ANCHOR_AREA)));
+        let foreground = Mesh2dHandle(meshes.add(Ellipse::new(
+            RESIZE_ANCHOR_AREA / 1.3,
+            RESIZE_ANCHOR_AREA / 1.3,
+        )));
+
+        let material_sky_blue = materials.add(Color::Srgba(SKY_400));
+        let material_white = materials.add(Color::Srgba(WHITE));
+
         commands
             .spawn((SpatialBundle::default(), SelectionHandles))
             .with_children(|parent| {
-                let shape =
-                    Mesh2dHandle(meshes.add(Ellipse::new(RESIZE_ANCHOR_AREA, RESIZE_ANCHOR_AREA)));
+                for (i, _) in corners.iter().enumerate() {
+                    // let rect = Mesh2dHandle(meshes.add(sides[i]));
 
-                for (i, corner) in corners.iter().enumerate() {
-                    let colour = Color::Srgba(SKY_400);
-
-                    parent.spawn(MaterialMesh2dBundle {
-                        mesh: shape.clone(),
-                        material: materials.add(colour),
-                        transform: Transform::from_xyz(corner.x, corner.y, 1.0),
-                        ..default()
-                    });
-
-                    let rect = Mesh2dHandle(meshes.add(sides[i]));
-
-                    parent.spawn(MaterialMesh2dBundle {
-                        mesh: shape.clone(),
-                        material: materials.add(colour),
-                        transform: Transform::from_xyz(corner.x, corner.y, 1.0),
-                        ..default()
-                    });
+                    let corner = if (i + 1) < corners.len() {
+                        corners[i + 1]
+                    } else {
+                        corners[0]
+                    };
 
                     let current = corners[i];
 
-                    let midpoint = match i + 1 {
-                        0..4 => current.midpoint(corners[i + 1]),
-                        _ => current.midpoint(corners[0]),
-                    };
+                    // let midpoint = if (i + 1) < corners.len() {
+                    //     current.midpoint(corners[i + 1])
+                    // } else {
+                    //     current.midpoint(corners[0])
+                    // };
 
-                    parent.spawn(MaterialMesh2dBundle {
-                        mesh: rect,
-                        material: materials.add(colour),
-                        transform: Transform::from_xyz(midpoint.x, midpoint.y, 1.0),
-                        ..default()
-                    });
+                    // parent.spawn(MaterialMesh2dBundle {
+                    //     mesh: rect,
+                    //     material: material_sky_blue.clone(),
+                    //     transform: Transform::from_xyz(midpoint.x, midpoint.y, i as f32 + 1.0),
+                    //     ..default()
+                    // });
+
+                    parent.spawn((
+                        MaterialMesh2dBundle {
+                            mesh: background.clone(),
+                            material: material_sky_blue.clone(),
+                            transform: Transform::from_xyz(corner.x, corner.y, i as f32 + 2.0),
+                            ..default()
+                        },
+                        SelectionHandle,
+                    ));
+
+                    parent.spawn((
+                        MaterialMesh2dBundle {
+                            mesh: foreground.clone(),
+                            material: material_white.clone(),
+                            transform: Transform::from_xyz(corner.x, corner.y, i as f32 + 3.0),
+                            ..default()
+                        },
+                        SelectionHandle,
+                    ));
                 }
             });
     }
 }
 
-fn handle_deselection(
-    mut deslection: EventReader<Pointer<Deselect>>,
-    selected: Query<Entity, With<Selected>>,
-    handles: Query<Entity, With<SelectionHandles>>,
-    mut commands: Commands,
+// fn handle_deselection(
+//     mut deslection: EventReader<Pointer<Deselect>>,
+//     selected: Query<Entity, With<Selected>>,
+//     handles: Query<Entity, With<SelectionHandles>>,
+//     mut commands: Commands,
+// ) {
+//     for deselect in deslection.read() {
+//         for entity in selected.iter() {
+//             commands.entity(entity).remove::<Selected>();
+//             commands.entity(handles.single()).despawn_recursive();
+//         }
+//     }
+// }
+
+fn handle_resize(
+    mut drags: EventReader<Pointer<Drag>>,
+    handles: Query<Entity, With<SelectionHandle>>,
+    mut images: Query<(&mut Sprite, &Handle<Image>)>,
+    image_store: Res<Assets<Image>>,
 ) {
-    for deselect in deslection.read() {
-        for entity in selected.iter() {
-            commands.entity(entity).remove::<Selected>();
-            commands.entity(handles.single()).despawn_recursive();
-        }
+    for drag in drags.read() {
+        let Ok(_) = handles.get(drag.target) else {
+            debug!("Running");
+            continue;
+        };
+
+        let (mut sprite, handle) = images.single_mut();
+
+        let dimensions = match sprite.custom_size {
+            Some(mut dimensions) => {
+                dimensions.x = dimensions.x + drag.delta.x;
+                dimensions.y = dimensions.y - drag.delta.y;
+
+                dimensions
+            }
+            None => {
+                let Some(image) = image_store.get(handle.id()) else {
+                    continue;
+                };
+
+                let mut dimensions = image.size_f32();
+
+                dimensions.x = dimensions.x + drag.delta.x;
+                dimensions.y = dimensions.y - drag.delta.y;
+
+                dimensions
+            }
+        };
+
+        sprite.custom_size = Some(dimensions);
     }
 }
