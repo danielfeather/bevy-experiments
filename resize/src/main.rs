@@ -223,37 +223,63 @@ fn show_box_on_selection(
 fn handle_resize(
     mut drags: EventReader<Pointer<Drag>>,
     handles: Query<Entity, With<SelectionHandle>>,
-    mut images: Query<(&mut Sprite, &Handle<Image>)>,
+    mut transforms: Query<&mut Transform>,
+    mut images: Query<(Entity, &mut Sprite, &Handle<Image>)>,
     image_store: Res<Assets<Image>>,
 ) {
     for drag in drags.read() {
-        let Ok(_) = handles.get(drag.target) else {
-            debug!("Running");
+        let Ok(handle_entity) = handles.get(drag.target) else {
             continue;
         };
 
-        let (mut sprite, handle) = images.single_mut();
+        let (entity, mut sprite, handle) = images.single_mut();
 
-        let dimensions = match sprite.custom_size {
-            Some(mut dimensions) => {
-                dimensions.x = dimensions.x + drag.delta.x;
-                dimensions.y = dimensions.y - drag.delta.y;
-
-                dimensions
-            }
+        let mut dimensions = match sprite.custom_size {
+            Some(dimensions) => dimensions,
             None => {
                 let Some(image) = image_store.get(handle.id()) else {
                     continue;
                 };
 
-                let mut dimensions = image.size_f32();
-
-                dimensions.x = dimensions.x + drag.delta.x;
-                dimensions.y = dimensions.y - drag.delta.y;
-
-                dimensions
+                image.size_f32()
             }
         };
+
+        let Ok(handle_transform) = transforms.get(handle_entity) else {
+            continue;
+        };
+
+        let handle_translation = Vec2::new(
+            handle_transform.translation.x,
+            handle_transform.translation.y,
+        );
+
+        match handle_translation {
+            Vec2 { x, y } if x.is_sign_negative() && y.is_sign_positive() => {
+                dimensions.x = dimensions.x - drag.delta.x;
+                dimensions.y = dimensions.y - drag.delta.y;
+            }
+            Vec2 { x, y } if x.is_sign_positive() && y.is_sign_positive() => {
+                dimensions.x = dimensions.x + drag.delta.x;
+                dimensions.y = dimensions.y - drag.delta.y;
+            }
+            Vec2 { x, y } if x.is_sign_positive() && y.is_sign_negative() => {
+                dimensions.x = dimensions.x + drag.delta.x;
+                dimensions.y = dimensions.y + drag.delta.y;
+            }
+            Vec2 { x, y } if x.is_sign_negative() && y.is_sign_negative() => {
+                dimensions.x = dimensions.x - drag.delta.x;
+                dimensions.y = dimensions.y + drag.delta.y;
+            }
+            _ => {}
+        }
+
+        let Ok(mut image_transform) = transforms.get_mut(entity) else {
+            continue;
+        };
+
+        image_transform.translation.x = image_transform.translation.x + drag.delta.x;
+        image_transform.translation.y = image_transform.translation.y - drag.delta.y;
 
         sprite.custom_size = Some(dimensions);
     }
