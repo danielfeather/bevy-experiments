@@ -1,11 +1,13 @@
 use bevy::{
     color::palettes::css::{BLUE, GREEN, RED, WHITE},
+    log::{Level, LogPlugin},
     prelude::*,
     sprite::Anchor,
 };
 use bevy_mod_picking::{
-    events::{DragOver, Pointer},
-    DefaultPickingPlugins,
+    debug::DebugPickingMode,
+    events::{Drag, DragEnter, DragLeave, Pointer},
+    DefaultPickingPlugins, PickableBundle,
 };
 
 const PADDING: f32 = 35.0;
@@ -13,8 +15,16 @@ const CARD_SIZE: Vec2 = Vec2::new(100., 160.);
 
 fn main() {
     App::new()
-        .add_plugins((DefaultPlugins, DefaultPickingPlugins))
+        .add_plugins((
+            DefaultPlugins.set(LogPlugin {
+                level: Level::DEBUG,
+                ..default()
+            }),
+            DefaultPickingPlugins,
+        ))
+        .insert_resource(DebugPickingMode::Normal)
         .add_systems(Startup, (spawn_camera, spawn_boxes))
+        .add_systems(Update, adjust_container)
         .run();
 }
 
@@ -40,14 +50,17 @@ struct Card;
 
 fn spawn_boxes(mut commands: Commands) {
     commands
-        .spawn(SpriteBundle {
-            sprite: Sprite {
-                color: Color::Srgba(WHITE),
-                custom_size: Some(calculate_box_size(3_usize, &CARD_SIZE, PADDING)),
+        .spawn((
+            SpriteBundle {
+                sprite: Sprite {
+                    color: Color::Srgba(WHITE),
+                    custom_size: Some(calculate_box_size(3_usize, &CARD_SIZE, PADDING)),
+                    ..default()
+                },
                 ..default()
             },
-            ..default()
-        })
+            PickableBundle::default(),
+        ))
         .with_children(|parent| {
             for i in 0..3 {
                 parent.spawn(SpriteBundle {
@@ -71,15 +84,46 @@ fn spawn_boxes(mut commands: Commands) {
 
 fn adjust_container(
     elastibox: Query<&Children, With<ElasticBox>>,
-    mut overs: EventReader<Pointer<DragOver>>,
+    mut overs: EventReader<Pointer<DragEnter>>,
+    mut outs: EventReader<Pointer<DragLeave>>,
+    mut drags: EventReader<Pointer<Drag>>,
     mut midpoints: Local<Vec<Vec2>>,
-    transforms: Query<&Transform>
+    transforms: Query<&Transform>,
 ) {
     for over in overs.read() {
         let Ok(elastiboxes) = elastibox.get(over.target) else {
             continue;
         };
 
-        midpoints = elastiboxes.iter().map(|child| )
+        *midpoints = elastiboxes
+            .iter()
+            .map(|child| {
+                let Ok(transform) = transforms.get(*child) else {
+                    return Vec2::ZERO;
+                };
+
+                Vec2::new(transform.translation.x, transform.translation.y)
+            })
+            .collect();
+
+        // midpoints(value)
+    }
+
+    for out in outs.read() {
+        let Ok(_) = elastibox.get(out.target) else {
+            continue;
+        };
+
+        midpoints.drain(0..);
+    }
+
+    if midpoints.is_empty() {
+        return;
+    }
+
+    for drag in drags.read() {
+        // When a drag over happens, need to loop through all the children and find the closest midpoint and then the index of
+        // that midpoint
+        debug!("{:#?}", drag);
     }
 }
