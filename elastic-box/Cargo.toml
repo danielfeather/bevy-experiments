@@ -5,4 +5,8 @@ edition = "2021"
 
 [dependencies]
 bevy = "0.14.1"
-bevy_mod_picking = "0.20.1"
+bevy-inspector-egui = "0.25.2"
+bevy_mod_picking = { version = "0.20.1", default-features = false, features = [
+    "backend_sprite",
+    "debug",
+] }

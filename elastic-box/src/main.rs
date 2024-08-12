@@ -1,12 +1,14 @@
 use bevy::{
-    color::palettes::css::{BLUE, GREEN, RED, WHITE},
+    color::palettes::css::{BLUE, GREEN, MAGENTA, RED, WHITE},
     log::{Level, LogPlugin},
     prelude::*,
     sprite::Anchor,
 };
+use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_mod_picking::{
     debug::DebugPickingMode,
     events::{Drag, DragEnter, DragLeave, Pointer},
+    prelude::{On, Pickable},
     DefaultPickingPlugins, PickableBundle,
 };
 
@@ -21,6 +23,7 @@ fn main() {
                 ..default()
             }),
             DefaultPickingPlugins,
+            WorldInspectorPlugin::default(),
         ))
         .insert_resource(DebugPickingMode::Normal)
         .add_systems(Startup, (spawn_camera, spawn_boxes))
@@ -51,6 +54,7 @@ struct Card;
 fn spawn_boxes(mut commands: Commands) {
     commands
         .spawn((
+            ElasticBox,
             SpriteBundle {
                 sprite: Sprite {
                     color: Color::Srgba(WHITE),
@@ -63,23 +67,58 @@ fn spawn_boxes(mut commands: Commands) {
         ))
         .with_children(|parent| {
             for i in 0..3 {
-                parent.spawn(SpriteBundle {
-                    sprite: Sprite {
-                        color: COLORS[i],
-                        custom_size: Some(CARD_SIZE),
-                        anchor: Anchor::CenterLeft,
+                parent.spawn((
+                    Card,
+                    PickableBundle {
+                        pickable: Pickable::IGNORE,
                         ..default()
                     },
-                    transform: Transform::from_xyz(
-                        PADDING + ((CARD_SIZE.x + PADDING) * i as f32)
-                            - (calculate_box_size(3_usize, &CARD_SIZE, PADDING).x / 2.0),
-                        0.0,
-                        1.0,
-                    ),
-                    ..default()
-                });
+                    SpriteBundle {
+                        sprite: Sprite {
+                            color: COLORS[i],
+                            custom_size: Some(CARD_SIZE),
+                            anchor: Anchor::CenterLeft,
+                            ..default()
+                        },
+                        transform: Transform::from_xyz(
+                            PADDING + ((CARD_SIZE.x + PADDING) * i as f32)
+                                - (calculate_box_size(3_usize, &CARD_SIZE, PADDING).x / 2.0),
+                            0.0,
+                            1.0,
+                        ),
+                        ..default()
+                    },
+                ));
             }
         });
+
+    commands.spawn((
+        Card,
+        PickableBundle {
+            pickable: Pickable {
+                should_block_lower: false,
+                ..default()
+            },
+            ..default()
+        },
+        SpriteBundle {
+            sprite: Sprite {
+                color: Color::Srgba(MAGENTA),
+                custom_size: Some(CARD_SIZE),
+                ..default()
+            },
+            transform: Transform::from_xyz(
+                0.0,
+                -calculate_box_size(3_usize, &CARD_SIZE, PADDING).y,
+                2.0,
+            ),
+            ..default()
+        },
+        On::<Pointer<Drag>>::target_component_mut::<Transform>(|e, transform| {
+            transform.translation.x = transform.translation.x + e.delta.x;
+            transform.translation.y = transform.translation.y - e.delta.y;
+        }),
+    ));
 }
 
 fn adjust_container(
@@ -87,9 +126,14 @@ fn adjust_container(
     mut overs: EventReader<Pointer<DragEnter>>,
     mut outs: EventReader<Pointer<DragLeave>>,
     mut drags: EventReader<Pointer<Drag>>,
-    mut midpoints: Local<Vec<Vec2>>,
-    transforms: Query<&Transform>,
+    mut midpoints: Local<Vec<f32>>,
+    mut current_child: Local<usize>,
+    transforms: Query<&GlobalTransform>,
+    camera: Query<(&Camera, &GlobalTransform)>,
+    mut transform: Query<&mut Transform>,
 ) {
+    let (camera, camera_transform) = camera.single();
+
     for over in overs.read() {
         let Ok(elastiboxes) = elastibox.get(over.target) else {
             continue;
@@ -99,12 +143,14 @@ fn adjust_container(
             .iter()
             .map(|child| {
                 let Ok(transform) = transforms.get(*child) else {
-                    return Vec2::ZERO;
+                    return 0.0;
                 };
 
-                Vec2::new(transform.translation.x, transform.translation.y)
+                transform.translation().x + (CARD_SIZE.x / 2.0)
             })
             .collect();
+
+        debug!("MidPoints: {:#?}", midpoints);
 
         // midpoints(value)
     }
@@ -122,8 +168,30 @@ fn adjust_container(
     }
 
     for drag in drags.read() {
-        // When a drag over happens, need to loop through all the children and find the closest midpoint and then the index of
-        // that midpoint
-        debug!("{:#?}", drag);
+        let Some(vec2) =
+            camera.viewport_to_world_2d(camera_transform, drag.pointer_location.position)
+        else {
+            continue;
+        };
+
+        let mut index = midpoints.len();
+
+        debug!("Cursor Pos: {}", vec2);
+
+        for (i, pos) in midpoints.iter().enumerate() {
+            if vec2.x < *pos {
+                index = i;
+                break;
+            }
+        }
+
+        if *current_child == index {
+            continue;
+        }
+
+        // Reorder children
+        // Get all the transforms
     }
 }
+
+fn reorder_child_transforms() {}
