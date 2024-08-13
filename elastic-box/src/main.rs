@@ -3,6 +3,7 @@ use bevy::{
     log::{Level, LogPlugin},
     prelude::*,
     sprite::Anchor,
+    utils::tracing::level_filters,
 };
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_mod_picking::{
@@ -25,9 +26,10 @@ fn main() {
             DefaultPickingPlugins,
             WorldInspectorPlugin::default(),
         ))
+        .add_event::<ReorderChildren>()
         .insert_resource(DebugPickingMode::Normal)
         .add_systems(Startup, (spawn_camera, spawn_boxes))
-        .add_systems(Update, adjust_container)
+        .add_systems(Update, (adjust_container, reorder_child_transforms))
         .run();
 }
 
@@ -121,16 +123,20 @@ fn spawn_boxes(mut commands: Commands) {
     ));
 }
 
+#[derive(Debug, Event)]
+struct ReorderChildren(Entity, usize);
+
 fn adjust_container(
     elastibox: Query<&Children, With<ElasticBox>>,
     mut overs: EventReader<Pointer<DragEnter>>,
     mut outs: EventReader<Pointer<DragLeave>>,
     mut drags: EventReader<Pointer<Drag>>,
     mut midpoints: Local<Vec<f32>>,
+    mut current_elastibox: Local<Option<Entity>>,
     mut current_child: Local<usize>,
-    transforms: Query<&GlobalTransform>,
+    global_transforms: Query<&GlobalTransform>,
     camera: Query<(&Camera, &GlobalTransform)>,
-    mut transform: Query<&mut Transform>,
+    mut reorder_children: EventWriter<ReorderChildren>,
 ) {
     let (camera, camera_transform) = camera.single();
 
@@ -139,20 +145,18 @@ fn adjust_container(
             continue;
         };
 
+        *current_elastibox = Some(over.target);
+
         *midpoints = elastiboxes
             .iter()
             .map(|child| {
-                let Ok(transform) = transforms.get(*child) else {
+                let Ok(transform) = global_transforms.get(*child) else {
                     return 0.0;
                 };
 
                 transform.translation().x + (CARD_SIZE.x / 2.0)
             })
             .collect();
-
-        debug!("MidPoints: {:#?}", midpoints);
-
-        // midpoints(value)
     }
 
     for out in outs.read() {
@@ -160,6 +164,7 @@ fn adjust_container(
             continue;
         };
 
+        *current_elastibox = None;
         midpoints.drain(0..);
     }
 
@@ -176,8 +181,6 @@ fn adjust_container(
 
         let mut index = midpoints.len();
 
-        debug!("Cursor Pos: {}", vec2);
-
         for (i, pos) in midpoints.iter().enumerate() {
             if vec2.x < *pos {
                 index = i;
@@ -189,9 +192,47 @@ fn adjust_container(
             continue;
         }
 
-        // Reorder children
-        // Get all the transforms
+        let Some(elastibox) = *current_elastibox else {
+            continue;
+        };
+
+        *current_child = index;
+
+        debug!("Reorder");
+
+        reorder_children.send(ReorderChildren(elastibox, index));
     }
 }
 
-fn reorder_child_transforms() {}
+fn reorder_child_transforms(
+    mut reorders: EventReader<ReorderChildren>,
+    mut elastibox_children: Query<(&Children, &mut Sprite), With<ElasticBox>>,
+    mut transforms: Query<&mut Transform>,
+) {
+    for ReorderChildren(elastibox, child_index) in reorders.read() {
+        let Ok((children, mut sprite)) = elastibox_children.get_mut(*elastibox) else {
+            continue;
+        };
+
+        sprite.custom_size = Some(calculate_box_size(children.len() + 1, &CARD_SIZE, PADDING));
+
+        for (i, child) in children.iter().enumerate() {
+            let new_translation = if &i >= child_index {
+                calculate_child_translation(children.len() + 1, i + 1)
+            } else {
+                calculate_child_translation(children.len() + 1, i)
+            };
+
+            let Ok(mut child_transform) = transforms.get_mut(*child) else {
+                continue;
+            };
+
+            child_transform.translation.x = new_translation.x;
+        }
+    }
+}
+
+fn calculate_child_translation(length: usize, index: usize) -> Vec2 {
+    PADDING + ((CARD_SIZE.x + PADDING) * index as f32)
+        - (calculate_box_size(length, &CARD_SIZE, PADDING) / 2.0)
+}

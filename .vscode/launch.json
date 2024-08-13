@@ -11,7 +11,7 @@
             "cargo": {
                 "args": [
                     "build",
-                    "--manifest-path=${cwd}/resize/Cargo.toml",
+                    "--manifest-path=${cwd}/elastic-box/Cargo.toml",
                 ],
                 "filter": {
                     "kind": "bin"
