@@ -124,10 +124,11 @@ fn spawn_boxes(mut commands: Commands) {
 }
 
 #[derive(Debug, Event)]
-struct ReorderChildren(Entity, usize);
+/// Triggers a reorder on children of the specified entity
+struct ReorderChildren(Entity, Option<usize>);
 
 fn adjust_container(
-    elastibox: Query<&Children, With<ElasticBox>>,
+    mut elastibox: Query<(&Children, &mut Sprite), With<ElasticBox>>,
     mut overs: EventReader<Pointer<DragEnter>>,
     mut outs: EventReader<Pointer<DragLeave>>,
     mut drags: EventReader<Pointer<Drag>>,
@@ -141,13 +142,15 @@ fn adjust_container(
     let (camera, camera_transform) = camera.single();
 
     for over in overs.read() {
-        let Ok(elastiboxes) = elastibox.get(over.target) else {
+        let Ok((children, mut sprite)) = elastibox.get_mut(over.target) else {
             continue;
         };
 
+        sprite.custom_size = Some(calculate_box_size(children.len() + 1, &CARD_SIZE, PADDING));
+
         *current_elastibox = Some(over.target);
 
-        *midpoints = elastiboxes
+        *midpoints = children
             .iter()
             .map(|child| {
                 let Ok(transform) = global_transforms.get(*child) else {
@@ -160,9 +163,13 @@ fn adjust_container(
     }
 
     for out in outs.read() {
-        let Ok(_) = elastibox.get(out.target) else {
+        let Ok((children, mut sprite)) = elastibox.get_mut(out.target) else {
             continue;
         };
+
+        sprite.custom_size = Some(calculate_box_size(children.len(), &CARD_SIZE, PADDING));
+
+        reorder_children.send(ReorderChildren(out.target, None));
 
         *current_elastibox = None;
         midpoints.drain(0..);
@@ -200,7 +207,7 @@ fn adjust_container(
 
         debug!("Reorder");
 
-        reorder_children.send(ReorderChildren(elastibox, index));
+        reorder_children.send(ReorderChildren(elastibox, Some(index)));
     }
 }
 
@@ -210,14 +217,14 @@ fn reorder_child_transforms(
     mut transforms: Query<&mut Transform>,
 ) {
     for ReorderChildren(elastibox, child_index) in reorders.read() {
-        let Ok((children, mut sprite)) = elastibox_children.get_mut(*elastibox) else {
+        let Ok((children, ..)) = elastibox_children.get_mut(*elastibox) else {
             continue;
         };
 
-        sprite.custom_size = Some(calculate_box_size(children.len() + 1, &CARD_SIZE, PADDING));
-
         for (i, child) in children.iter().enumerate() {
-            let new_translation = if &i >= child_index {
+            let new_translation = if let None = child_index {
+                calculate_child_translation(children.len(), i)
+            } else if child_index.is_some() && &i >= &child_index.unwrap() {
                 calculate_child_translation(children.len() + 1, i + 1)
             } else {
                 calculate_child_translation(children.len() + 1, i)
