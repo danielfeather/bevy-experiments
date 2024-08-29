@@ -1,0 +1,87 @@
+name: Build Wasm
+
+on:
+  push:
+    branches: ['main']
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build Client and Server
+    runs-on: ubuntu-latest
+    env:
+      RUSTFLAGS: --cfg=web_sys_unstable_apis
+    steps:
+      - uses: actions/checkout@v4
+
+      - run: rustup toolchain install stable --profile minimal
+
+      - name: Add wasm as a target
+        run: rustup target add wasm32-unknown-unknown
+
+      - id: cache
+        uses: Swatinem/rust-cache@v2
+
+      # Only install wasm-pack of not already installed
+      - name: Install wasm-pack
+        run: cargo install wasm-pack
+
+      - name: Build Server
+        run: cargo build --package twenty_five_server --release
+
+      - name: Build Client
+        run: wasm-pack build crates/twenty_five_client --target web --release --out-dir static/dist
+
+      - name: Upload Client
+        uses: actions/upload-artifact@v4
+        with:
+          name: wasm
+          path: './crates/twenty_five_client/static/dist'
+          overwrite: true
+
+      - name: Upload Server
+        uses: actions/upload-artifact@v4
+        with:
+          name: server
+          path: './target/release/twenty_five_server'
+          overwrite: true
+
+  deploy_client:
+    name: Deploy Web Client
+    needs: build
+    permissions:
+      contents: read
+      id-token: write
+      pages: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Download Wasm Module
+        uses: actions/download-artifact@v4
+        with:
+          name: wasm
+          path: './crates/twenty_five_client/static/dist'
+
+      - name: Move assets
+        run: |
+          rm ./crates/twenty_five_client/static/assets
+          mv ./crates/twenty_five_client/assets ./crates/twenty_five_client/static/
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: './crates/twenty_five_client/static'
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
