@@ -2333,6 +2333,7 @@ dependencies = [
  "bevy",
  "bevy-inspector-egui",
  "bevy_mod_picking",
+ "wasm-bindgen",
 ]
 
 [[package]]
