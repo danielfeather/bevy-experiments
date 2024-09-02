@@ -4413,6 +4413,7 @@ dependencies = [
  "bevy-inspector-egui",
  "bevy_mod_picking",
  "bevy_web_asset",
+ "wasm-bindgen",
 ]
 
 [[package]]

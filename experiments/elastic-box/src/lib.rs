@@ -27,6 +27,7 @@ pub fn start() {
                 })
                 .set(WindowPlugin {
                     primary_window: Some(Window {
+                        canvas: Some("#bevy".to_string()),
                         fit_canvas_to_parent: true,
                         ..default()
                     }),
