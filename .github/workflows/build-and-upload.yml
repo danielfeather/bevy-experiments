@@ -18,6 +18,8 @@ jobs:
 
       - run: rustup toolchain install stable --profile minimal
 
+      - run: npm ci
+
       - name: Add wasm as a target
         run: rustup target add wasm32-unknown-unknown
 
@@ -28,24 +30,20 @@ jobs:
       - name: Install wasm-pack
         run: cargo install wasm-pack
 
-      - name: Build Server
-        run: cargo build --package twenty_five_server --release
+      - name: Build Elastic Box
+        run: 'npx nx run elastic-box:build'
 
-      - name: Build Client
-        run: wasm-pack build crates/twenty_five_client --target web --release --out-dir static/dist
+      - name: Build Elastic Box
+        run: 'npx nx run resize:build'
 
-      - name: Upload Client
+      - name: Build Www
+        run: 'npx nx run www:build'
+
+      - name: Upload Page
         uses: actions/upload-artifact@v4
         with:
-          name: wasm
-          path: './crates/twenty_five_client/static/dist'
-          overwrite: true
-
-      - name: Upload Server
-        uses: actions/upload-artifact@v4
-        with:
-          name: server
-          path: './target/release/twenty_five_server'
+          name: experiments
+          path: 'dist/www'
           overwrite: true
 
   deploy_client:
@@ -66,21 +64,16 @@ jobs:
       - name: Setup Pages
         uses: actions/configure-pages@v4
 
-      - name: Download Wasm Module
+      - name: Download Experiments
         uses: actions/download-artifact@v4
         with:
-          name: wasm
-          path: './crates/twenty_five_client/static/dist'
-
-      - name: Move assets
-        run: |
-          rm ./crates/twenty_five_client/static/assets
-          mv ./crates/twenty_five_client/assets ./crates/twenty_five_client/static/
+          name: experiments
+          path: './dist/www'
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: './crates/twenty_five_client/static'
+          path: './dist/www'
 
       - name: Deploy to GitHub Pages
         id: deployment
