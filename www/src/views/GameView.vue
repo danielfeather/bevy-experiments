@@ -1,10 +1,14 @@
+<script setup lang="ts">
+const base_url = import.meta.env.BASE_URL
+</script>
+
 <template>
   <div class="container">
     <RouterLink to="/">Back</RouterLink>
     <h1>{{ $route.params.experiment }}</h1>
     <iframe
       class="bevy-game"
-      :src="`${import.meta.env.BASE_URL}/bevy/${$route.params.experiment}`"
+      :src="`${base_url}#/bevy/${$route.params.experiment}`"
       frameborder="0"
     ></iframe>
   </div>
