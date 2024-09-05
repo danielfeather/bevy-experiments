@@ -7,9 +7,29 @@
   "targets": {
     "build": {
       "executor": "nx:run-commands",
+      "outputs": [
+        "{projectRoot}/dist/resize/"
+      ],
+      "inputs": [
+        "{projectRoot}/src",
+        "{projectRoot}/Cargo.toml"
+      ],
       "options": {
-        "command": "wasm-pack build {projectRoot} --dev --out-dir ../../dist/resize"
-      }
+        "command": "wasm-pack build {projectRoot} --out-dir ../../dist/resize"
+      },
+      "configurations": {
+        "dev": {
+          "args": [
+            "--dev"
+          ]
+        },
+        "prod": {
+          "args": [
+            "--release"
+          ]
+        }
+      },
+      "defaultConfiguration": "dev"
     }
   },
   "tags": []

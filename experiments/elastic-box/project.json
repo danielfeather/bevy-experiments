@@ -7,9 +7,29 @@
   "targets": {
     "build": {
       "executor": "nx:run-commands",
+      "outputs": [
+        "{projectRoot}/dist/elastic-box/"
+      ],
+      "inputs": [
+        "{projectRoot}/src",
+        "{projectRoot}/Cargo.toml"
+      ],
       "options": {
-        "command": "wasm-pack build {projectRoot} --dev --out-dir ../../dist/elastic-box"
-      }
+        "command": "wasm-pack build {projectRoot} --out-dir ../../dist/elastic-box"
+      },
+      "configurations": {
+        "dev": {
+          "args": [
+            "--dev"
+          ]
+        },
+        "prod": {
+          "args": [
+            "--release"
+          ]
+        }
+      },
+      "defaultConfiguration": "dev"
     }
   },
   "tags": []
