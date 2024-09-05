@@ -8,7 +8,7 @@
     "build": {
       "executor": "nx:run-commands",
       "outputs": [
-        "{projectRoot}/dist/resize/"
+        "{workspaceRoot}/dist/{projectName}"
       ],
       "inputs": [
         "{projectRoot}/src",
