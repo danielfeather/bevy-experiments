@@ -8,6 +8,7 @@ use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_mod_picking::{
     debug::DebugPickingMode,
     events::{Drag, DragEnter, DragLeave, Pointer},
+    pointer::InputMove,
     prelude::{On, Pickable},
     DefaultPickingPlugins, PickableBundle,
 };
@@ -39,7 +40,10 @@ pub fn start() {
         .add_event::<ReorderChildren>()
         .insert_resource(DebugPickingMode::Normal)
         .add_systems(Startup, (spawn_camera, spawn_boxes))
-        .add_systems(Update, (adjust_container, reorder_child_transforms))
+        .add_systems(
+            Update,
+            (adjust_container, reorder_child_transforms, log_input_move),
+        )
         .run();
 }
 
@@ -252,4 +256,10 @@ fn reorder_child_transforms(
 fn calculate_child_translation(length: usize, index: usize) -> Vec2 {
     PADDING + ((CARD_SIZE.x + PADDING) * index as f32)
         - (calculate_box_size(length, &CARD_SIZE, PADDING) / 2.0)
+}
+
+fn log_input_move(mut moves: EventReader<InputMove>) {
+    for moveEvent in moves.read() {
+        debug!("Input Move: {:?}", moveEvent);
+    }
 }
